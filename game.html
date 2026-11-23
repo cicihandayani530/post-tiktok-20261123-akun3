@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>BLOCK TOWER YARD — Day 1 vs Day 7</title>
+<style>
+  html, body { margin: 0; padding: 0; background: #f2c98a; overflow: hidden; }
+  canvas { display: block; width: 1080px; height: 1920px; image-rendering: pixelated; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script>
+// BLOCK TOWER YARD — Akun 3 (@cicihandayani), bounty day-one-day-seven.
+// KREATIF: halaman konstruksi yang sama, kamera diam, tujuh hari berselang.
+// Day 1: tanah + 2 balok bertumpuk, derek diam. Day 7: halaman yang sama,
+// menara 10 balok, derek menurunkan balok, bendera berkibar, lampu sorot.
+// Semua gerak fungsi murni dari t (deterministik): window.renderAt(day, t)
+// dipanggil capture headless; tanpa Date.now / Math.random di render.
+const cv = document.getElementById('c');
+const ctx = cv.getContext('2d');
+ctx.imageSmoothingEnabled = false;
+
+const W = 1080, H = 1920;
+const GROUND = 1420;             // garis tanah, sama di kedua hari
+const TOWER_X = 540;             // pusat menara, sama persis
+const BLOCK = { w: 200, h: 84 }; // ukuran balok
+const COLORS = ['#e2583e', '#f2a541', '#3e7ec2', '#57b368', '#8e6fc2', '#e28ab0'];
+
+function sky(day) {
+  const g = ctx.createLinearGradient(0, 0, 0, GROUND);
+  if (day === 1) { g.addColorStop(0, '#bcd9e8'); g.addColorStop(1, '#f2ddb8'); }
+  else { g.addColorStop(0, '#6fb7e8'); g.addColorStop(1, '#ffe1a0'); }
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, GROUND);
+  // tanah: halaman berdebu
+  ctx.fillStyle = day === 1 ? '#c9a06a' : '#b98d54';
+  ctx.fillRect(0, GROUND, W, H - GROUND);
+  ctx.fillStyle = day === 1 ? '#9dbb6a' : '#7fae4e';
+  ctx.fillRect(0, GROUND, W, 46); // strip rumput
+}
+
+function clouds(day, t) {
+  const list = [[120, 200, 1.0], [520, 320, 0.85], [800, 180, 0.7]];
+  ctx.fillStyle = 'rgba(255,255,255,0.94)';
+  for (const [cx, cy, s] of list) {
+    const x = ((cx + t * 12 * s) % 1250) - 130;
+    ctx.fillRect(x, cy, 150 * s, 44 * s);
+    ctx.fillRect(x + 32 * s, cy - 26 * s, 88 * s, 40 * s);
+    ctx.fillRect(x + 96 * s, cy + 8 * s, 68 * s, 30 * s);
+  }
+}
+
+function sun(day) {
+  ctx.fillStyle = '#ffd94a';
+  ctx.beginPath(); ctx.arc(880, 240, day === 1 ? 62 : 84, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#fff3b0';
+  ctx.beginPath(); ctx.arc(880, 240, (day === 1 ? 62 : 84) * 0.6, 0, Math.PI * 2); ctx.fill();
+}
+
+function fence() {
+  // pagar kayu keliling halaman (sama kedua hari)
+  ctx.fillStyle = '#8a6a42';
+  for (let x = 40; x <= 1040; x += 100) ctx.fillRect(x, GROUND - 120, 18, 120);
+  ctx.fillStyle = '#a9804e';
+  ctx.fillRect(30, GROUND - 116, 1020, 14);
+  ctx.fillRect(30, GROUND - 62, 1020, 14);
+}
+
+function crane(day, t, hookY) {
+  // derek menara di kiri (posisi tetap); day7 kait membawa balok
+  ctx.fillStyle = '#e8b93b'; // tiang
+  ctx.fillRect(120, 420, 60, GROUND - 420);
+  ctx.fillStyle = '#c99a22';
+  for (let y = 460; y < GROUND - 40; y += 80) ctx.fillRect(120, y, 60, 18);
+  ctx.fillStyle = '#e8b93b'; // jib horizontal
+  ctx.fillRect(120, 400, 760, 34);
+  ctx.fillStyle = '#c99a22';
+  ctx.fillRect(120, 434, 760, 12);
+  // kabin + pemberat
+  ctx.fillStyle = '#3a3a3a'; ctx.fillRect(150, 446, 70, 60);
+  ctx.fillStyle = '#e8b93b'; ctx.fillRect(60, 400, 60, 90);
+  // kabel dari jib ke kait (posisi kait mengikuti hookY)
+  const hookX = 760;
+  ctx.fillStyle = '#2c2c2c';
+  ctx.fillRect(hookX - 3, 434, 6, hookY - 434);
+  ctx.fillStyle = '#d23b2e'; // kait
+  ctx.fillRect(hookX - 22, hookY, 44, 26);
+  return hookX;
+}
+
+function block(x, y, color, i) {
+  ctx.fillStyle = color;
+  ctx.fillRect(x - BLOCK.w / 2, y - BLOCK.h, BLOCK.w, BLOCK.h);
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillRect(x - BLOCK.w / 2, y - BLOCK.h, BLOCK.w, 12);
+  ctx.fillStyle = 'rgba(0,0,0,0.18)';
+  ctx.fillRect(x - BLOCK.w / 2, y - 14, BLOCK.w, 14);
+  ctx.fillStyle = 'rgba(0,0,0,0.35)';
+  ctx.font = 'bold 30px monospace'; ctx.textAlign = 'center';
+  ctx.fillText(String(i + 1), x, y - BLOCK.h + 52);
+  ctx.textAlign = 'left';
+}
+
+function tower(day, t) {
+  // menara di tengah: day1 = 2 balok; day7 = 10 balok + bendera
+  const n = day === 1 ? 2 : 10;
+  for (let i = 0; i < n; i++) {
+    const wob = day === 7 ? Math.sin(i * 1.7) * 8 : 0;
+    block(TOWER_X + wob, GROUND - 46 - i * BLOCK.h, COLORS[i % COLORS.length], i);
+  }
+  if (day === 7) {
+    // tiang + bendera berkibar di puncak (di atas jib derek agar terlihat)
+    const topY = GROUND - 46 - 10 * BLOCK.h;
+    ctx.fillStyle = '#3a3a3a'; ctx.fillRect(TOWER_X - 5, topY - 220, 10, 220);
+    const wave = Math.sin(t * 4) * 10;
+    ctx.fillStyle = '#d23b2e';
+    ctx.beginPath();
+    ctx.moveTo(TOWER_X + 5, topY - 220);
+    ctx.lineTo(TOWER_X + 130, topY - 202 + wave);
+    ctx.lineTo(TOWER_X + 5, topY - 184);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#ffd94a';
+    ctx.beginPath(); ctx.arc(TOWER_X, topY - 220, 10, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+function lamps(day, t) {
+  // lampu sorot day7: tiang + sorot menyala, berkedip halus
+  if (day !== 7) return;
+  for (const lx of [150, 930]) {
+    ctx.fillStyle = '#4a4a4a'; ctx.fillRect(lx - 8, GROUND - 420, 16, 420);
+    ctx.fillStyle = '#ffd94a';
+    const glow = 0.75 + Math.sin(t * 2 + lx) * 0.15;
+    ctx.globalAlpha = glow;
+    ctx.beginPath(); ctx.arc(lx, GROUND - 430, 34, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.25 * glow;
+    ctx.beginPath(); ctx.moveTo(lx - 26, GROUND - 420);
+    ctx.lineTo(lx + 26, GROUND - 420);
+    ctx.lineTo(lx + 150, GROUND); ctx.lineTo(lx - 150, GROUND);
+    ctx.closePath(); ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+}
+
+function worker(x, y, color, t, ph) {
+  // pekerja kecil berhelm, berjalan pelan bolak-balik
+  const wx = x + Math.sin(t * 0.5 + ph) * 40;
+  ctx.fillStyle = '#ffd94a'; // helm
+  ctx.fillRect(wx - 16, y - 118, 32, 18);
+  ctx.fillStyle = color; // badan
+  ctx.fillRect(wx - 16, y - 100, 32, 56);
+  ctx.fillStyle = '#2c3e50'; // kaki
+  const step = Math.sin(t * 5 + ph) * 10;
+  ctx.fillRect(wx - 14, y - 44, 12, 44 + step * 0.2);
+  ctx.fillRect(wx + 2, y - 44, 12, 44 - step * 0.2);
+}
+
+function sign(text, x, y) {
+  ctx.fillStyle = '#8a5a2b'; ctx.fillRect(x - 8, y, 16, 60);
+  ctx.fillStyle = '#c89b6a'; ctx.fillRect(x - 110, y - 64, 220, 72);
+  ctx.fillStyle = '#4a2c12'; ctx.font = 'bold 44px monospace';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(text, x, y - 28);
+  ctx.textBaseline = 'alphabetic'; ctx.textAlign = 'left';
+}
+
+function hud(day, t) {
+  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+  ctx.fillStyle = 'rgba(20,30,40,0.55)'; ctx.fillRect(36, 36, 580, 128);
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 64px monospace';
+  ctx.fillText(day === 1 ? 'DAY 1' : 'DAY 7', 60, 108);
+  ctx.font = 'bold 34px monospace';
+  ctx.fillStyle = '#ffe9a8';
+  ctx.fillText('BLOCK TOWER YARD', 60, 148);
+  if (day === 7) {
+    ctx.fillStyle = 'rgba(20,30,40,0.55)'; ctx.fillRect(664, 36, 380, 128);
+    ctx.fillStyle = '#7ed491'; ctx.font = 'bold 38px monospace';
+    ctx.fillText('TOWER RISING', 688, 92);
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 34px monospace';
+    const h = Math.min(10, 2 + Math.floor(t * 1.2));
+    ctx.fillText('HEIGHT ' + h + '/10', 688, 140);
+  }
+  if (day === 7 && t >= 5.0) {
+    ctx.fillStyle = 'rgba(20,30,40,0.65)'; ctx.fillRect(140, 1780, 800, 90);
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 46px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText('Start yours at make.fun', 540, 1840);
+    ctx.textAlign = 'left';
+  }
+}
+
+function renderAt(day, t) {
+  ctx.clearRect(0, 0, W, H);
+  sky(day); sun(day); clouds(day, t); fence();
+  tower(day, t);
+  // kait derek: day1 diam di tengah jalan; day7 menurunkan balok ke puncak
+  let hookY;
+  if (day === 1) hookY = 700;
+  else {
+    const topY = GROUND - 46 - 10 * BLOCK.h;
+    hookY = 520 + Math.min(1, t / 7) * (topY - 40 - 520);
+  }
+  const hookX = crane(day, t, hookY);
+  if (day === 7) {
+    // balok yang dibawa kait (turun bersama kait, bergoyang pelan)
+    const sway = Math.sin(t * 1.8) * 6;
+    block(hookX + sway, hookY + 26 + BLOCK.h, '#e2583e', 10);
+  }
+  lamps(day, t);
+  if (day === 1) {
+    worker(820, GROUND, '#3e7ec2', t, 0);
+    sign('DAY 1', 180, 1620);
+    // 2 balok cadangan di kanan
+    block(880, GROUND, '#f2a541', 0);
+    block(880, GROUND - BLOCK.h, '#3e7ec2', 1);
+  } else {
+    worker(240, GROUND, '#3e7ec2', t, 0);
+    worker(880, GROUND, '#57b368', t, 2.2);
+    sign('DAY 7', 180, 1620);
+  }
+  hud(day, t);
+}
+
+window.renderAt = renderAt;
+renderAt(1, 0);
+</script>
+</body>
+</html>
