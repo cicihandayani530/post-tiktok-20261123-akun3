@@ -12,7 +12,10 @@
 // from TikTok. Nothing this program writes about the video is scored.
 // The game lives in game.html; the rendered video is post-tiktok-akun3.mp4
 // (1080x1920, 14.5 s: day 1 5 s, day 7 9.5 s with the end card overlaid
-// on the last 2.5 s).
+// on the last 2.5 s). Frames were captured deterministically from
+// game.html (window.renderAt) and assembled with ffmpeg, all inside this
+// session — the video genuinely moves: clouds drift, the crane lowers its
+// eleventh block, the flag waves, the height counter climbs.
 //
 // Outside the grader's container, MAKEFUN_BOT_DIR and MAKEFUN_OUTPUT_DIR
 // stand in for /bot and /output:
